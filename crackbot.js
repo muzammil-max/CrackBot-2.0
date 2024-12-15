@@ -26,6 +26,8 @@ const client = new Client({
   partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 
+const { spawn } = require("child_process");
+
 const fs = require("fs");
 const { type } = require("os");
 const path = require("path");
@@ -42,6 +44,25 @@ const puppeteer = require("puppeteer");
 const axios = require("axios");
 const sharp = require("sharp");
 // const fetch = require("node-fetch");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { ChartJSNodeCanvas } = require("chartjs-node-canvas");
+
+//run the main.py
+const pythonProcess = spawn("python", ["main.py"]);
+
+// Listen for Python script output
+pythonProcess.stdout.on("data", (data) => {
+  console.log(`Python stdout: ${data}`);
+});
+
+pythonProcess.stderr.on("data", (data) => {
+  console.error(`Python stderr: ${data}`);
+});
+
+// When the Python script exits
+pythonProcess.on("close", (code) => {
+  console.log(`Python process exited with code ${code}`);
+});
 
 //!welcome initiliazation
 var welcomeCanvas = {};
@@ -122,6 +143,381 @@ client.on("guildMemberAdd", async (member) => {
   } catch (error) {
     console.error("Error in guildMemberAdd event:", error);
   }
+});
+
+//! Tetris
+const canvasWidth = 200;
+const canvasHeight = 400;
+
+// Tetris grid dimensions
+const gridWidth = 10;
+const gridHeight = 20;
+const blockSize = 20;
+
+// Define Tetris piece shapes (tetrominoes)
+const pieces = [
+  {
+    shape: [
+      [1, 1, 1],
+      [0, 1, 0],
+    ],
+    color: "cyan",
+  }, // T shape
+  {
+    shape: [
+      [1, 1],
+      [1, 1],
+    ],
+    color: "yellow",
+  }, // O shape
+  {
+    shape: [
+      [1, 1, 0],
+      [0, 1, 1],
+    ],
+    color: "green",
+  }, // S shape
+  {
+    shape: [
+      [0, 1, 1],
+      [1, 1, 0],
+    ],
+    color: "red",
+  }, // Z shape
+  {
+    shape: [
+      [1, 0, 0],
+      [1, 1, 1],
+    ],
+    color: "blue",
+  }, // L shape
+  {
+    shape: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+    color: "orange",
+  }, // J shape
+  { shape: [[1, 1, 1, 1]], color: "purple" }, // I shape
+];
+
+// Initialize grid (0 means empty)
+let grid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+
+// Current piece and its position
+let piece = generateNewPiece();
+
+// Start game and send initial grid
+client.once("ready", () => {
+  console.log("Bot is online!");
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return; // Ignore bot messages
+
+  // If the message is "!tetris", start the game
+  if (message.content.toLowerCase() === "!tetris") {
+    await startTetrisGame(message);
+  }
+});
+
+async function startTetrisGame(message) {
+  // Send the initial game state (grid + piece)
+  const tetrisImage = drawTetrisGrid();
+  const gameMessage = await message.reply({
+    content: "Here is your Tetris grid:",
+    files: [tetrisImage],
+  });
+
+  // Add reactions for controls (move left, right, down, rotate)
+  await gameMessage.react("⬅️");
+  await gameMessage.react("➡️");
+  await gameMessage.react("⬇️");
+  await gameMessage.react("🔄");
+
+  // Collect reactions for user input
+  const filter = (reaction, user) =>
+    ["⬅️", "➡️", "⬇️", "🔄"].includes(reaction.emoji.name) && !user.bot;
+  const collector = gameMessage.createReactionCollector({
+    filter,
+    time: 60000,
+  }); // Collect for 1 minute
+
+  collector.on("collect", async (reaction, user) => {
+    switch (reaction.emoji.name) {
+      case "⬅️": // Move left
+        movePiece(-1, 0);
+        break;
+      case "➡️": // Move right
+        movePiece(1, 0);
+        break;
+      case "⬇️": // Move down
+        movePiece(0, 1);
+        break;
+      case "🔄": // Rotate
+        rotatePiece();
+        break;
+    }
+    reaction.users.remove(user); // Remove user's reaction after it is processed
+
+    // If piece can't move down, place it and generate a new one
+    if (!movePiece(0, 1)) {
+      placePiece();
+      if (!canMove(piece.x, piece.y, piece.shape)) {
+        // Game over if we can't place the new piece
+        collector.stop(); // Stop the game loop
+        gameMessage.edit("Game Over! Refresh to play again.");
+      } else {
+        piece = generateNewPiece();
+      }
+      redrawGame(gameMessage);
+    } else {
+      redrawGame(gameMessage); // Redraw the grid if piece moves
+    }
+  });
+}
+
+// Function to generate a new random piece
+function generateNewPiece() {
+  const randomPiece = pieces[Math.floor(Math.random() * pieces.length)];
+  return {
+    shape: randomPiece.shape,
+    x: Math.floor(gridWidth / 2) - Math.floor(randomPiece.shape[0].length / 2), // Center it horizontally
+    y: 0,
+    color: randomPiece.color,
+  };
+}
+
+// Function to move the piece on the grid
+function movePiece(dx, dy) {
+  const newX = piece.x + dx;
+  const newY = piece.y + dy;
+
+  // Check if the move is valid (within bounds and no collision)
+  if (canMove(newX, newY, piece.shape)) {
+    piece.x = newX;
+    piece.y = newY;
+    return true;
+  }
+  return false;
+}
+
+// Function to check if the piece can move (no collision)
+function canMove(x, y, shape) {
+  for (let row = 0; row < shape.length; row++) {
+    for (let col = 0; col < shape[row].length; col++) {
+      if (shape[row][col] === 1) {
+        if (
+          x + col < 0 ||
+          x + col >= gridWidth ||
+          y + row >= gridHeight ||
+          grid[y + row][x + col] === 1
+        ) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+// Function to rotate the piece
+function rotatePiece() {
+  const rotatedShape = piece.shape[0]
+    .map((_, index) => piece.shape.map((row) => row[index]))
+    .reverse(); // Rotate 90 degrees
+
+  if (canMove(piece.x, piece.y, rotatedShape)) {
+    piece.shape = rotatedShape;
+  }
+}
+
+// Function to place the piece permanently on the grid
+function placePiece() {
+  for (let row = 0; row < piece.shape.length; row++) {
+    for (let col = 0; col < piece.shape[row].length; col++) {
+      if (piece.shape[row][col] === 1) {
+        grid[piece.y + row][piece.x + col] = 1; // Place piece in the grid
+      }
+    }
+  }
+
+  // Check for line clearing
+  clearFullLines();
+}
+
+// Function to clear full lines
+function clearFullLines() {
+  for (let row = 0; row < gridHeight; row++) {
+    if (grid[row].every((cell) => cell === 1)) {
+      // Shift all rows down
+      for (let y = row; y > 0; y--) {
+        grid[y] = [...grid[y - 1]]; // Copy the previous row
+      }
+      grid[0] = Array(gridWidth).fill(0); // Reset top row
+    }
+  }
+}
+
+// Function to redraw the game grid and send the updated image
+async function redrawGame(gameMessage) {
+  const updatedTetrisImage = drawTetrisGrid();
+  await gameMessage.edit({
+    content: "Here is your updated Tetris grid:",
+    files: [updatedTetrisImage],
+  });
+}
+
+// Function to draw the Tetris grid and the current piece
+function drawTetrisGrid() {
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // Draw the grid cells (filled blocks)
+  for (let y = 0; y < gridHeight; y++) {
+    for (let x = 0; x < gridWidth; x++) {
+      if (grid[y][x] === 1) {
+        ctx.fillStyle = "blue"; // Filled blocks
+        ctx.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(x * blockSize, y * blockSize, blockSize, blockSize);
+      }
+    }
+  }
+
+  // Draw the current piece on top of the grid
+  for (let row = 0; row < piece.shape.length; row++) {
+    for (let col = 0; col < piece.shape[row].length; col++) {
+      if (piece.shape[row][col] === 1) {
+        ctx.fillStyle = piece.color; // Current piece color
+        ctx.fillRect(
+          (piece.x + col) * blockSize,
+          (piece.y + row) * blockSize,
+          blockSize,
+          blockSize
+        );
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(
+          (piece.x + col) * blockSize,
+          (piece.y + row) * blockSize,
+          blockSize,
+          blockSize
+        );
+      }
+    }
+  }
+
+  // Return the image as a buffer to send it in Discord
+  return canvas.toBuffer();
+}
+//? Ai in CrackBot {FAILED TO ADD AI :( }
+// Generate Response from Gemini API (Gemini 1.5 Flash)
+// const APIKEY = "AIzaSyANwl-a_docTEM7jk5NsMI_LISD7_h2060";
+// const genAI = new GoogleGenerativeAI(APIKEY);
+// async function generateResponse(prompt) {
+//   try {
+//     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+//     const result = await model.generateContent(prompt); // Simplified call
+//     const response =
+//       result?.candidates?.[0]?.content?.parts
+//         ?.map((part) => part.text)
+//         .join("") || "I couldn't generate a valid response.";
+//     return formatLatexResponse(response);
+//   } catch (error) {
+//     console.error("Error generating response:", error.message);
+//     return "I couldn't generate a response. Please try again!";
+//   }
+// }
+// // Format LaTeX Responses
+// function formatLatexResponse(text) {
+//   text = text.replace(/\$([^$]+)\$/g, "`$1`"); // Inline LaTeX
+//   text = text.replace(/\$\$([^$]+)\$\$/g, "```latex\n$1\n```"); // Block LaTeX
+//   return text;
+// }
+
+// // Generate Graph using Chart.js
+// async function generateGraph(expression) {
+//   const width = 800; // Width of the graph
+//   const height = 600; // Height of the graph
+//   const chartCallback = () => {};
+//   const chartJSNodeCanvas = new ChartJSNodeCanvas({
+//     width,
+//     height,
+//     chartCallback,
+//   });
+
+//   try {
+//     const x = Array.from({ length: 10 }, (_, i) => i + 1);
+//     const y = x.map((val) => eval(expression.replace(/x/g, val)));
+
+//     const configuration = {
+//       type: "line",
+//       data: {
+//         labels: x,
+//         datasets: [
+//           {
+//             label: "Graph",
+//             data: y,
+//             borderColor: "rgba(75, 192, 192, 1)",
+//             backgroundColor: "rgba(75, 192, 192, 0.2)",
+//             fill: true,
+//           },
+//         ],
+//       },
+//     };
+
+//     const buffer = await chartJSNodeCanvas.renderToBuffer(configuration);
+//     return buffer;
+//   } catch (error) {
+//     console.error("Error generating graph:", error);
+//     return null;
+//   }
+// }
+
+// // Commands
+// client.on("messageCreate", async (message) => {
+//   if (message.author.bot) return;
+
+//   const content = message.content;
+
+//   if (content.startsWith("!ask ")) {
+//     const question = content.slice(5).trim();
+//     await message.channel.send("Thinking... ⌛");
+//     const response = await generateResponse(question);
+//     await message.channel.send(response);
+//   }
+
+//   if (content.startsWith("!askbot ")) {
+//     const question = content.slice(8).trim();
+//     await message.channel.send("Thinking... ⌛");
+//     const response = await generateResponse(question);
+//     await message.channel.send(response);
+//   }
+
+//   if (content.startsWith("!graph ")) {
+//     const expression = content.slice(7).trim();
+//     await message.channel.send(
+//       `Generating graph for expression: \`${expression}\``
+//     );
+//     const graphBuffer = await generateGraph(expression);
+//     if (graphBuffer) {
+//       const fileName = "graph.png";
+//       fs.writeFileSync(fileName, graphBuffer);
+//       await message.channel.send({ files: [fileName] });
+//       fs.unlinkSync(fileName); // Cleanup the file after sending
+//     } else {
+//       await message.channel.send(
+//         "Error generating graph. Please check your expression!"
+//       );
+//     }
+//   }
+// });
+
+client.once("ready", () => {
+  console.log(`${client.user.tag} is ready to roll!`);
 });
 
 //!  Graphs Plotter [By Muzammil]--------------------------------------
@@ -1660,8 +2056,8 @@ client.on("messageCreate", async (message) => {
     // Optional: Log the error to a specific channel or log file
   }
 });
-const TOKEN = "INSERT TOKEN HERE";
-const CLIENT_ID = "CLIENT ID";
+const TOKEN = "YOUR TOKEN ID HERE";
+const CLIENT_ID = "YOUR CLIENT ID HERE";
 const GUILD_ID = "1138487837608648745";
 
 const commands = [
@@ -2037,4 +2433,4 @@ client.on("messageCreate", async (message) => {
   }
 });
 // Log in to Discord with your app's token
-client.login("TOKEN ID");
+client.login(TOKEN);

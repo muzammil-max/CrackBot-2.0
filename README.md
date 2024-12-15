@@ -1,9 +1,29 @@
-This is the code for the CrackBOT
+# 🚀 CrackBOT - **Crack A Level** 🛠️
 
-The code is under Crack A level.
+---
 
+### **Code Details**
 
-Code written by Mohammad and Muzammil
-Code tested and approved by Areeb Naeem
+- **Written by**: Mohammad and Muzammil
+- **Tested & Approved by**: Areeb Naeem, TurboGlitch, and Areesha ✅
 
-If found any issues refer to us!
+---
+
+### **What's New?** 🔥
+
+- 📊 **Added Graphs**
+- 🎮 **Added a Game: Tetris**
+- 🐞 **Bug Fixes**
+- 🛠️ **Added More Commands**
+
+---
+
+### **Instructions**
+
+If you encounter any **issues** or have any questions, please **refer to us**!  
+We're here to assist you! 🤝
+
+---
+
+**This code is under the use of Crack A level** 🎉  
+**All the data recieved is from Crack A level database**
