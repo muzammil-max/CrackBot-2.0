@@ -5,10 +5,10 @@
 ### **Code Details**
 
 <<<<<<< HEAD
-- **Written by**: Mohammad and Muzammi
+- **Written by**: Mohammad and Muzammil
 =======
 # Code written by Mohammad and Muzammil-Max
-# approved by Areeb Naeem
+
 
 ---
 
