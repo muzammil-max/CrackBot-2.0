@@ -5,13 +5,10 @@
 ### **Code Details**
 
 <<<<<<< HEAD
-- **Written by**: Mohammad and Muzammil
-- **Tested & Approved by**: Areeb Naeem, TurboGlitch, and Areesha ✅
+- **Written by**: Mohammad and Muzammi
 =======
-# Code written by Mohammad and Muzammil-Max .
-# Code tested by Areesha and TurboGlitch and
+# Code written by Mohammad and Muzammil-Max
 # approved by Areeb Naeem
->>>>>>> 27b345526cea3149805965514678606c1b178649
 
 ---
 
