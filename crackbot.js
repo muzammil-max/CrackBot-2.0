@@ -639,7 +639,11 @@ async function plotGraph(
         width: 800,
         height: 600,
       };
-  const browser = await puppeteer.launch();
+  // const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
+});
   const page = await browser.newPage();
 
   const htmlContent = `
@@ -2056,8 +2060,8 @@ client.on("messageCreate", async (message) => {
     // Optional: Log the error to a specific channel or log file
   }
 });
-const TOKEN = "YOUR TOKEN ID HERE";
-const CLIENT_ID = "YOUR CLIENT ID HERE";
+const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = "1138487837608648745";
 
 const commands = [
@@ -2433,4 +2437,4 @@ client.on("messageCreate", async (message) => {
   }
 });
 // Log in to Discord with your app's token
-client.login(TOKEN);
+client.login(process.env.DISCORD_TOKEN);

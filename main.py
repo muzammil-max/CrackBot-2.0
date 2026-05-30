@@ -7,8 +7,9 @@ from discord.ext import commands
 import random
 import asyncio
 
-
-TOKENID = 'YOUR TOKEN ID HERE'
+import os
+TOKENID = os.environ.get('DISCORD_TOKEN')
+# TOKENID = 'YOUR TOKEN ID HERE'
 board = []
 num_of_rows = 18
 num_of_cols = 10
